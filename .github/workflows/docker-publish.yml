@@ -62,4 +62,4 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
-          script: kubectl rollout union.yaml
+          script: kubectl replace -f union.yaml
