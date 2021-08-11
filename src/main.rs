@@ -10,6 +10,7 @@ async fn hello() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    println!("Starting Server");
     HttpServer::new(|| {
         App::new().service(hello)
     })
