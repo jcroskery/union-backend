@@ -13,7 +13,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new().service(hello)
     })
-    .bind(format!("127.0.0.1:{}", PORT))?
+    .bind(format!("0.0.0.0:{}", PORT))?
     .run()
     .await
 }
