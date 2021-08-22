@@ -21,24 +21,6 @@
             "cwd": "${workspaceFolder}",
             "sourceLanguages": ["rust"],
             "console": "integratedTerminal"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'union'",
-            "cargo": {
-                "args": [
-                    "build"
-                ],
-                "filter": {
-                    "name": "union",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}",
-            "sourceLanguages": ["rust"],
-            "console": "integratedTerminal"
         }
     ]
 }

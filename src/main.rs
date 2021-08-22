@@ -1,16 +1,18 @@
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 
-const PORT: i32 = 8080;
-const MESSAGE: &str = "Hello world!";
+mod static_interface;
+mod html_builder;
+
+const PORT: i32 = 8081;
 
 #[get("/")]
 async fn hello() -> impl Responder {
-    HttpResponse::Ok().body(MESSAGE)
+    HttpResponse::Ok().body(static_interface::get_static("index.html").await)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("Starting Server");
+    println!("Starting Server on port {}", PORT);
     HttpServer::new(|| {
         App::new().service(hello)
     })
