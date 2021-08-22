@@ -3,7 +3,7 @@ use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 mod static_interface;
 mod html_builder;
 
-const PORT: i32 = 8080;
+const PORT: i32 = 80;
 
 #[get("/")]
 async fn hello() -> impl Responder {
