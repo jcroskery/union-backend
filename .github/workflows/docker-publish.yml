@@ -63,7 +63,7 @@ jobs:
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
           script: |
-          cd /union
-          git pull
-          systemctl restart union
+            cd /union
+            git pull
+            systemctl restart union
 
