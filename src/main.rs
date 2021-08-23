@@ -1,4 +1,6 @@
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix::{Actor, StreamHandler};
+use actix_web_actors::ws;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
 use serde::Deserialize;
@@ -7,6 +9,7 @@ use std::io::BufReader;
 
 mod html_builder;
 mod static_interface;
+mod mysql_init;
 
 const HTTPPORT: i32 = 80;
 const HTTPSPORT: i32 = 443;
@@ -16,6 +19,36 @@ const KEY: &str = "/etc/letsencrypt/live/union.tk/privkey.pem";
 #[derive(Deserialize)]
 struct Info {
     name: String,
+}
+struct MyWs {
+    url: String
+}
+
+impl Actor for MyWs {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+/// Handler for ws::Message message
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
+    fn handle(
+        &mut self,
+        msg: Result<ws::Message, ws::ProtocolError>,
+        ctx: &mut Self::Context,
+    ) {
+        match msg {
+            Ok(ws::Message::Text(text)) => {
+                let json: serde_json::Value = serde_json::from_str(&text).expect("No JSON format");
+
+                let response_json = serde_json::json!({"success" : true});
+                ctx.text(serde_json::to_string(&response_json).expect("Failed to Stringify JSON"));
+            },
+            _ => (),
+        }
+    }
+}
+
+async fn ws_response(info: web::Path<Info>, req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
+    ws::start(MyWs { url: info.name.clone() }, &req, stream)
 }
 
 async fn static_response(info: web::Path<Info>) -> impl Responder {
@@ -34,6 +67,7 @@ async fn static_response(info: web::Path<Info>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    mysql_init::create_tables().await.expect("Failed to initialize tables");
     let mut config = ServerConfig::new(NoClientAuth::new());
     let cert_file = &mut BufReader::new(File::open(PUBCERT).unwrap());
     let key_file = &mut BufReader::new(File::open(KEY).unwrap());
@@ -45,6 +79,7 @@ async fn main() -> std::io::Result<()> {
     
     HttpServer::new(|| {
         App::new()
+            .service(web::resource("/ws/{name}").route(web::get().to(ws_response)))
             .service(web::resource("/{name:.*}").route(web::get().to(static_response)))
     })
     .bind_rustls(format!("0.0.0.0:{}", HTTPSPORT), config)?
