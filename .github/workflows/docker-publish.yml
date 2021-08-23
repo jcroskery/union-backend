@@ -32,6 +32,7 @@ jobs:
           script: |
             cd /union
             git pull
+            cargo build --release
             systemctl restart union
             
 
