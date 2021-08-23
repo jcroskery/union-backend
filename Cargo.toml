@@ -7,10 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web="4.0.0-beta.8"
+actix-web={version="4.0.0-beta.8", features = ["rustls"]}
+rustls="*"
 actix-rt="*"
 tokio-tungstenite="*"   
-tokio={version="*"}
+tokio={version="*", features=["fs"]}
 serde_json="*"
 futures-util="*"
 union_structs={ git="ssh://git@github.com/Somebody62/union_structs", branch="main", version="7.0.0"}
