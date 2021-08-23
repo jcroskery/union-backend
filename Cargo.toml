@@ -14,3 +14,4 @@ tokio={version="*"}
 serde_json="*"
 futures-util="*"
 union_structs={ git="ssh://git@github.com/Somebody62/union_structs", branch="main", version="7.0.0"}
+serde="*"

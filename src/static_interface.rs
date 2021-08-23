@@ -4,7 +4,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use union_structs::{StaticRequest, StaticResponse};
 
-pub async fn get_static(url: &str) -> String {
+pub async fn get_static(url: &str) -> Option<String> {
     let (mut ws_stream, _) = connect_async("ws://127.0.0.1:2978")
         .await
         .expect("Did not connect");
@@ -18,6 +18,9 @@ pub async fn get_static(url: &str) -> String {
         .await
         .expect("WS send error");
     let returned_message = ws_stream.next().await.expect("No message").expect("Error reading message");
-    let static_response: StaticResponse = from_value(from_str(&returned_message.to_string()).expect("Failed to convert response into JSON")).expect("Failed to convert JSON into StaticResponse");
-    static_response.get_static_file().expect("No static file found")
+    if let Ok(static_response) = from_value::<StaticResponse>(from_str(&returned_message.to_string()).expect("Failed to convert response into JSON")) {
+        Some(static_response.get_static_file().expect("No static file found"))
+    } else {
+        None
+    }
 }

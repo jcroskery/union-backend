@@ -1340,6 +1340,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "futures-util",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
