@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 const USERNAME_ERROR_MESSAGE: &str = "Usernames must be between 4 and 16 characters long with only letters, numbers, and underscores (_).";
 const GALLERY_NAME_ERROR_MESSAGE: &str = "Gallery names must be between 1 and 128 characters long with only letters, numbers, and underscores (_).";
@@ -15,10 +15,12 @@ lazy_static! {
     static ref IMAGETITLE_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_\-.#]{1,128}.jpg$").unwrap();
     static ref PASSWORD_REGEX: Regex = Regex::new(r"^.{8,64}$").unwrap();
     static ref LABEL_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_@]{4,64}$").unwrap();
-    static ref EMAIL_REGEX: Regex = Regex::new(r"^(([a-z0-9_+.]{1,32})@([a-z0-9\-\.]{1,32})\.([a-z]{2,6}))$").unwrap();
+    static ref EMAIL_REGEX: Regex =
+        Regex::new(r"^(([a-z0-9_+.]{1,32})@([a-z0-9\-\.]{1,32})\.([a-z]{2,6}))$").unwrap();
+    pub static ref ID_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9]{255}$").unwrap();
 }
 
-fn parse(regex: &Regex, unverified: &str) -> Option<String> {
+pub fn parse(regex: &Regex, unverified: &str) -> Option<String> {
     if regex.is_match(unverified) {
         Some(String::from(unverified))
     } else {
@@ -26,13 +28,13 @@ fn parse(regex: &Regex, unverified: &str) -> Option<String> {
     }
 }
 pub struct InputError {
-    message: String
+    message: String,
 }
 
 impl InputError {
-    pub fn new(message: Option<&str>) -> Self{
+    pub fn new(message: Option<&str>) -> Self {
         InputError {
-            message: String::from(message.unwrap_or("Unspecified Input Error"))
+            message: String::from(message.unwrap_or("Unspecified Input Error")),
         }
     }
 }
@@ -45,10 +47,16 @@ impl fmt::Display for InputError {
 
 impl fmt::Debug for InputError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ error: {}, file: {}, line: {} }}", &self.message, file!(), line!()) // programmer-facing output
+        write!(
+            f,
+            "{{ error: {}, file: {}, line: {} }}",
+            &self.message,
+            file!(),
+            line!()
+        ) // programmer-facing output
     }
 }
-/* 
+/*
 pub struct Username {
     username: String,
 }
@@ -167,21 +175,27 @@ mod tests {
 
     #[test]
     fn good_usernames() {
-        vec!["Somebody62", "56_3", "Goodjob2020fffff"].into_iter().for_each(|username| {
-            assert!(parse(&USERNAME_REGEX, username).is_some());
-        });
+        vec!["Somebody62", "56_3", "Goodjob2020fffff"]
+            .into_iter()
+            .for_each(|username| {
+                assert!(parse(&USERNAME_REGEX, username).is_some());
+            });
     }
     #[test]
     fn bad_usernames() {
-        vec!["QQQQQ4%", "e-4", "fdsfjlskdfalsdflajsdlgnoandsg"].into_iter().for_each(|username| {
-            assert!(parse(&USERNAME_REGEX, username).is_none());
-        });
+        vec!["QQQQQ4%", "e-4", "fdsfjlskdfalsdflajsdlgnoandsg"]
+            .into_iter()
+            .for_each(|username| {
+                assert!(parse(&USERNAME_REGEX, username).is_none());
+            });
     }
     #[test]
     fn good_gallery_names() {
-        vec!["Somebody62", "56f3", "Goodjob2020____fffff"].into_iter().for_each(|gallery| {
-            assert!(parse(&GALLERY_REGEX, gallery).is_some());
-        });
+        vec!["Somebody62", "56f3", "Goodjob2020____fffff"]
+            .into_iter()
+            .for_each(|gallery| {
+                assert!(parse(&GALLERY_REGEX, gallery).is_some());
+            });
     }
     #[test]
     fn bad_gallery_names() {
@@ -191,9 +205,11 @@ mod tests {
     }
     #[test]
     fn good_image_names() {
-        vec!["Somebody62.jpg", "#DCIM-546_rev.2.jpg", "#.jpg"].into_iter().for_each(|image| {
-            assert!(parse(&IMAGETITLE_REGEX, image).is_some());
-        });
+        vec!["Somebody62.jpg", "#DCIM-546_rev.2.jpg", "#.jpg"]
+            .into_iter()
+            .for_each(|image| {
+                assert!(parse(&IMAGETITLE_REGEX, image).is_some());
+            });
     }
     #[test]
     fn bad_image_names() {
@@ -203,7 +219,13 @@ mod tests {
     }
     #[test]
     fn good_passwords() {
-        vec!["Somebody62", "56_3hjklj!@#$%^&*()", "Goodjob2020fffffakjdsflkj;"].into_iter().for_each(|password| {
+        vec![
+            "Somebody62",
+            "56_3hjklj!@#$%^&*()",
+            "Goodjob2020fffffakjdsflkj;",
+        ]
+        .into_iter()
+        .for_each(|password| {
             assert!(parse(&PASSWORD_REGEX, password).is_some());
         });
     }
@@ -215,7 +237,13 @@ mod tests {
     }
     #[test]
     fn good_labels() {
-        vec!["_89@", "HIFDFKAFDJSDFKLJFDDjsdfslkfj@__@_@__@_@_@_@_", "Goodjob2020fffffakjdsfl"].into_iter().for_each(|label| {
+        vec![
+            "_89@",
+            "HIFDFKAFDJSDFKLJFDDjsdfslkfj@__@_@__@_@_@_@_",
+            "Goodjob2020fffffakjdsfl",
+        ]
+        .into_iter()
+        .for_each(|label| {
             assert!(parse(&LABEL_REGEX, label).is_some());
         });
     }
@@ -227,18 +255,41 @@ mod tests {
     }
     #[test]
     fn good_emails() {
-        vec!["f@d.co", "justus@olmmcc.tk", "cool.dude@abcdef.gh.ij"].into_iter().for_each(|email| {
-            assert!(parse(&EMAIL_REGEX, email).is_some());
-        });
+        vec!["f@d.co", "justus@olmmcc.tk", "cool.dude@abcdef.gh.ij"]
+            .into_iter()
+            .for_each(|email| {
+                assert!(parse(&EMAIL_REGEX, email).is_some());
+            });
     }
     #[test]
     fn bad_emails() {
-        vec!["ffdsjk@ccc", "fsf@.tk", "@col.col", "asdfasdfasdfasdfasdfasdfasdfasdfasdf@hi.com", "asdf@asdfasdfasdfasdfasdfasfdasdfasdfasdf.com", "asdf@asdf.asdfkjf"].into_iter().for_each(|email| {
+        vec![
+            "ffdsjk@ccc",
+            "fsf@.tk",
+            "@col.col",
+            "asdfasdfasdfasdfasdfasdfasdfasdfasdf@hi.com",
+            "asdf@asdfasdfasdfasdfasdfasfdasdfasdfasdf.com",
+            "asdf@asdf.asdfkjf",
+        ]
+        .into_iter()
+        .for_each(|email| {
             assert!(parse(&EMAIL_REGEX, email).is_none());
         });
     }
+    #[test]
+    fn good_ids() {
+        vec!["Bgb3IqYnBrC9MVfvvTW3h2jLd8O7Q0Cz7acpkR17DfPliZJjwpD6yEfgT19M2b6C3pPoOWJSwCmGXlTHmE864D2yWGsAZtegKWK61BwjINRL2br8W1pQC9tYNhZxongAB1TDlzcbIk9NQNJbXneHEx1tQEiiEb651zSQAjvA77QHIVCkOaa6WE2dkwrkVHDaKCCqQ1v1GY73nro6rIUelzQWCrsfdATB2dfuHLbwOXpMq9PEQCpWNaiVVstDuh0"].into_iter().for_each(|id| {
+            assert!(parse(&ID_REGEX, id).is_some());
+        });
+    }
+    #[test]
+    fn bad_ids() {
+        vec!["Bgb3IqYnBrC9MVfvvTW3h2jLd8O7Q0Cz7acpkR17DfPliZJjwpD6yEfgT19M2b6C3pPoOWJSwCmGXlTHmE864D2yWGsAZtegKWK61BwjINRL2br8W1pQC9tYNhZxongAB1TDlzcbIk9NQNJbXneHEx1tQEiiEb651zSQAjvA77QHIVCkOaa6WE2dkwrkVHDaKCCqQ1v1GY73nro6rIUelzQWCrsfdATB2dfuHLbwOXpMq9PEQCpWNaiVVstDuh_", "Bgb3IqYnBrC9MVfvvTW3h2jLd8O7Q0Cz7acpkR17DfPliZJjwpD6yEfgT19M2b6C3pPoOWJSwCmGXlTHmE864D2yWGsAZtegKWK61BwjINRL2br8W1pQC9tYNhZxongAB1TDlzcbIk9NQNJbXneHEx1tQEiiEb651zSQAjvA77QHIVCkOaa6WE2dkwrkVHDaKCCqQ1v1GY73nro6rIUelzQWCrsfdATB2dfuHLbwOXpMq9PEQCpWNaiVVstDuh"].into_iter().for_each(|id| {
+            assert!(parse(&ID_REGEX, id).is_none());
+        });
+    }
 }
-/* 
+/*
 #[derive(Deserialize)]
 pub struct ImageDetails {
     username: String,
@@ -285,7 +336,6 @@ impl GalleryDetails {
 }
 */
 
-
 #[derive(Deserialize)]
 pub struct Signup {
     email: String,
@@ -320,3 +370,17 @@ impl Login {
     }
 }
 
+#[derive(Deserialize)]
+pub struct GalleryCreate {
+    gallery_name: String,
+    id: String,
+}
+
+impl GalleryCreate {
+    pub fn get_gallery_name(&self) -> Option<String> {
+        parse(&GALLERY_REGEX, &self.gallery_name)
+    }
+    pub fn get_id(&self) -> Option<String> {
+        parse(&ID_REGEX, &self.id)
+    }
+}
