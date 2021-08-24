@@ -11,8 +11,8 @@ const LABEL_ERROR_MESSAGE: &str = "Labels must be between 4 and 64 characters lo
 
 lazy_static! {
     static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_]{4,16}$").unwrap();
-    static ref GALLERY_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_]{1,128}$").unwrap();
-    static ref IMAGETITLE_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_\-.#]{1,128}.jpg$").unwrap();
+    pub static ref GALLERY_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_]{1,128}$").unwrap();
+    pub static ref IMAGETITLE_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_\-.#]{1,128}.[Jj][Pp][Ee]?[gG]$").unwrap();
     static ref PASSWORD_REGEX: Regex = Regex::new(r"^.{8,64}$").unwrap();
     static ref LABEL_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_@]{4,64}$").unwrap();
     static ref EMAIL_REGEX: Regex =
@@ -205,7 +205,7 @@ mod tests {
     }
     #[test]
     fn good_image_names() {
-        vec!["Somebody62.jpg", "#DCIM-546_rev.2.jpg", "#.jpg"]
+        vec!["Somebody62.jpg", "#DCIM-546_rev.2.jpg", "#.jpg", "fd.JPeG"]
             .into_iter()
             .for_each(|image| {
                 assert!(parse(&IMAGETITLE_REGEX, image).is_some());
@@ -213,7 +213,7 @@ mod tests {
     }
     #[test]
     fn bad_image_names() {
-        vec!["QQQQQ4%.jpg", "e-4.png", "fdsfjlskdfalsdflajsdlgnoandsggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.jpg"].into_iter().for_each(|image| {
+        vec!["QQQQQ4%.jpg", "e-4.png", "bad.Jp_g", "fdsfjlskdfalsdflajsdlgnoandsggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg.jpg"].into_iter().for_each(|image| {
             assert!(parse(&IMAGETITLE_REGEX, image).is_none());
         });
     }
@@ -382,5 +382,24 @@ impl GalleryCreate {
     }
     pub fn get_id(&self) -> Option<String> {
         parse(&ID_REGEX, &self.id)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ImageCreate {
+    image_name: String,
+    image: String,
+    gallery_name: String
+}
+
+impl ImageCreate {
+    pub fn get_image_name(&self) -> Option<String> {
+        parse(&IMAGETITLE_REGEX, &self.image_name)
+    }
+    pub fn get_image(&self) -> Option<String> {
+        Some(self.image.clone())
+    }
+    pub fn get_gallery_name(&self) -> Option<String> {
+        parse(&GALLERY_REGEX, &self.gallery_name)
     }
 }

@@ -2,6 +2,7 @@ use actix::prelude::*;
 use actix::{Actor, StreamHandler};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_actors::ws;
+use futures_util::stream::StreamExt as _;
 use mysql::params;
 use mysql::prelude::*;
 use rand::distributions::Alphanumeric;
@@ -17,9 +18,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::BufReader;
-use union_structs::{GalleryCreate, Login, Signup};
+use union_structs::{GalleryCreate, ImageCreate, Login, Signup};
 
-mod html_builder;
 mod mysql_init;
 mod static_interface;
 mod union_structs;
@@ -38,6 +38,13 @@ struct Info {
 struct GalleryInfo {
     username: String,
     gallery: String,
+}
+
+#[derive(Deserialize)]
+struct ImageServeInfo {
+    name: String,
+    gallery: String,
+    image: String,
 }
 struct MyWs {
     url: String,
@@ -67,9 +74,10 @@ fn handle_signup(json: Value) -> Value {
         mysql_init::get_conn()
             .exec_drop(
                 "INSERT INTO users(email, password, username) VALUES (:email, :password, :username);",
-                params!("email"=>email, "password"=>password_hash, "username"=>username),
+                params!("email"=>email, "password"=>password_hash, "username"=>&username),
             )
             .expect("Failed to execute signup mysql statement");
+        static_interface::make_user_dir(username);
         json!({ "success": true })
     } else {
         json!({"success" : false})
@@ -94,7 +102,7 @@ fn handle_login(json: Value) -> Value {
                 let id = String::from_utf8(vec).expect("RNG error");
                 mysql_init::get_conn()
                     .exec_drop(
-                        "DELETE FROM activesessions WHERE user=:userid",
+                        "DELETE FROM activesessions WHERE user=:userid;",
                         params!("userid" => &user_id),
                     )
                     .expect("Failed to delete old ids");
@@ -119,11 +127,72 @@ fn handle_gallery_creation(json: Value) -> Value {
     {
         if let Some(user_row) = authenticate_with_id(id) {
             let userid: i32 = mysql::from_value(user_row["id"].clone());
-            mysql_init::get_conn().exec_drop("INSERT INTO galleries(user, name) VALUES (:user, :name);", params!("user"=> userid, "name"=>gallery_name)).expect("Failed to create gallery");
+            let username = mysql::from_value(user_row["username"].clone());
+            mysql_init::get_conn()
+                .exec_drop(
+                    "INSERT INTO galleries(user, name) VALUES (:user, :name);",
+                    params!("user"=> userid, "name"=>&gallery_name),
+                )
+                .expect("Failed to create gallery");
+            static_interface::make_gallery_dir(username, gallery_name);
             return json!({"success": true});
         }
     }
     json!({"success": false})
+}
+
+fn handle_single_image(user_row: mysql::Row, image: ImageCreate) -> Option<()> {
+    if let (Some(image_name), Some(image), Some(gallery_name)) = (
+        image.get_image_name(),
+        image.get_image(),
+        image.get_gallery_name(),
+    ) {
+        let userid: i32 = mysql::from_value(user_row["id"].clone());
+        let username = mysql::from_value(user_row["username"].clone());
+        let gallery: Vec<mysql::Row> = mysql_init::get_conn()
+            .exec(
+                "SELECT * FROM galleries WHERE user=:userid AND name=:galleryname",
+                params!("userid"=>userid, "galleryname"=> &gallery_name),
+            )
+            .expect("Failed to find gallery for image");
+        if gallery.len() == 1 {
+            let galleryid: i32 = mysql::from_value(gallery[0]["id"].clone());
+            mysql_init::get_conn()
+                .exec_drop(
+                    "INSERT INTO images(gallery, name) VALUES (:galleryid, :imagename)",
+                    params!("galleryid"=>galleryid, "imagename"=>&image_name),
+                )
+                .expect("Failed to insert image into database");
+            static_interface::make_image(username, gallery_name, image_name, image);
+            return Some(());
+        }
+    }
+    None
+}
+
+async fn image_upload_handler(hr: HttpRequest, mut stream: web::Payload) -> impl Responder {
+    if let Some(user_row) = authenticate(hr).await {
+        let mut bytes = web::BytesMut::new();
+        while let Some(item) = stream.next().await {
+            bytes.extend_from_slice(&item.expect("Error parsing posted bytes"));
+        }
+        let mut json: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("Failed to parse JSON");
+        let images: Vec<ImageCreate> = json
+            .as_array_mut()
+            .expect("Invalid image creation JSON")
+            .into_iter()
+            .map(|value| {
+                serde_json::from_value::<ImageCreate>(value.clone())
+                    .expect("Failed to convert JSON to CreateImage struct")
+            })
+            .collect();
+        let _ = images
+            .into_iter()
+            .filter_map(|image| handle_single_image(user_row.clone(), image))
+            .collect::<Vec<_>>();
+    }
+    HttpResponse::Ok().body("")
 }
 
 /// Handler for ws::Message message
@@ -132,7 +201,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
         match msg {
             Ok(ws::Message::Text(text)) => {
                 let json: serde_json::Value = serde_json::from_str(&text).expect("No JSON format");
-
                 let returned_json = match self.url.as_str() {
                     "login" => handle_login(json),
                     "signup" => handle_signup(json),
@@ -145,6 +213,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWs {
                     }
                 };
                 ctx.text(serde_json::to_string(&returned_json).expect("Failed to Stringify JSON"))
+            }
+            Err(e) => {
+                println!("Websocket error: {:?}", e);
             }
             _ => (),
         }
@@ -215,7 +286,45 @@ async fn userpage_response(info: web::Path<Info>, hr: HttpRequest) -> impl Respo
     HttpResponse::Ok().body("")
 }
 
-async fn gallery_response(info: web::Path<Info>, hr: HttpRequest) -> impl Responder {
+async fn gallery_response(info: web::Path<GalleryInfo>, hr: HttpRequest) -> impl Responder {
+    if let Some(user_row) = authenticate(hr).await {
+        let userid: i32 = mysql::from_value(user_row["id"].clone());
+        let username: String = mysql::from_value(user_row["username"].clone());
+        if username == info.username {
+            if let Some(gallery) =
+                union_structs::parse(&union_structs::GALLERY_REGEX, &info.gallery)
+            {
+                let user_gallery: Vec<mysql::Row> = mysql_init::get_conn()
+                    .exec(
+                        "SELECT * FROM galleries WHERE user=:userid AND name=:galleryname",
+                        params!("userid"=>userid, "galleryname"=>&gallery),
+                    )
+                    .expect("Failed to query user gallery");
+                if user_gallery.len() == 1 {
+                    let gallery_id: i32 = mysql::from_value(user_gallery[0]["id"].clone());
+                    let gallery_name: String = mysql::from_value(user_gallery[0]["name"].clone());
+                    let user_images: Vec<mysql::Row> = mysql_init::get_conn()
+                        .exec(
+                            "SELECT * FROM images WHERE gallery=:gallery",
+                            params!("gallery"=>gallery_id),
+                        )
+                        .expect("Failed to select gallery images");
+                    let user_image_names: Vec<String> = user_images
+                        .into_iter()
+                        .map(|image_row| mysql::from_value(image_row["name"].clone()))
+                        .collect();
+                    return HttpResponse::Ok().body(
+                        static_interface::get_gallery_page(
+                            &username,
+                            &gallery_name,
+                            user_image_names,
+                        )
+                        .await,
+                    );
+                }
+            }
+        }
+    }
     HttpResponse::Ok().body("")
 }
 
@@ -226,11 +335,46 @@ async fn static_response(info: web::Path<Info>) -> impl Responder {
         info.name.clone()
     };
     println!("Got request for {}", name);
-    HttpResponse::Ok().body(
-        static_interface::get_static(&name)
-            .await
-            .unwrap_or(String::new()),
-    )
+    let possible_file = static_interface::get_static(&name).await;
+    if let Some(file) = possible_file {
+        HttpResponse::Ok().body(file)
+    } else {
+        println!("Error finding file");
+        HttpResponse::Ok().body("")
+    }
+}
+
+async fn image_server(info: web::Path<ImageServeInfo>, hr: HttpRequest) -> impl Responder {
+    if let Some(user_row) = authenticate(hr).await {
+        let username: String = mysql::from_value(user_row["username"].clone());
+        let userid: i32 = mysql::from_value(user_row["id"].clone());
+        if username == info.name {
+            if let (Some(gallery), Some(image_name)) =
+                (union_structs::parse(&union_structs::GALLERY_REGEX, &info.gallery), union_structs::parse(&union_structs::IMAGETITLE_REGEX, &info.image))
+            {
+                let user_gallery: Vec<mysql::Row> = mysql_init::get_conn()
+                    .exec(
+                        "SELECT * FROM galleries WHERE user=:userid AND name=:galleryname",
+                        params!("userid"=>userid, "galleryname"=>&gallery),
+                    )
+                    .expect("Failed to query user gallery");
+                if user_gallery.len() == 1 {
+                    let gallery_id: i32 = mysql::from_value(user_gallery[0]["id"].clone());
+                    let user_images: Vec<mysql::Row> = mysql_init::get_conn()
+                        .exec(
+                            "SELECT * FROM images WHERE gallery=:gallery AND name=:imagename",
+                            params!("gallery"=>gallery_id, "imagename"=>&image_name),
+                        )
+                        .expect("Failed to select gallery images");
+                    if user_images.len() == 1 {
+                        return HttpResponse::Ok().body(static_interface::get_image(&username, &gallery, &image_name).await.expect("THIS IMAGE FILE SHOULD EXIST"));
+                    }
+                    
+                }
+            }
+        }
+    }
+    HttpResponse::Ok().body("")
 }
 
 #[actix_web::main]
@@ -248,9 +392,13 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .service(
+                web::resource("/u/{name}/{gallery}/{image}").route(web::get().to(image_server)),
+            )
+            .service(
                 web::resource("/u/{username}/{gallery}").route(web::get().to(gallery_response)),
             )
             .service(web::resource("/u/{name}").route(web::get().to(userpage_response)))
+            .service(web::resource("/post/image").route(web::post().to(image_upload_handler)))
             .service(web::resource("/ws/{name}").route(web::get().to(ws_response)))
             .service(web::resource("/{name:.*}").route(web::get().to(static_response)))
     })

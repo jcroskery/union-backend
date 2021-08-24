@@ -25,7 +25,7 @@ pub fn create_tables() -> Result<()> {
     );").expect("Failed to initialize label table.");
     conn.query_drop(r"CREATE TABLE IF NOT EXISTS images ( 
         id INT AUTO_INCREMENT PRIMARY KEY, 
-        user INT NOT NULL,
+        gallery INT NOT NULL,
         name VARCHAR(128) NOT NULL
     );").expect("Failed to initialize label table.");
     conn.query_drop(r"CREATE TABLE IF NOT EXISTS labelmap ( 
