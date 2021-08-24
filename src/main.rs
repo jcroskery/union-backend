@@ -391,6 +391,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(|| {
         App::new()
+            .service(web::resource("/favicon.ico").route(web::get().to(|| HttpResponse::NotFound())))
             .service(
                 web::resource("/u/{name}/{gallery}/{image}").route(web::get().to(image_server)),
             )
